@@ -1,10 +1,8 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Net;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace csharp_kintone_console_app
 {
@@ -20,9 +18,57 @@ namespace csharp_kintone_console_app
             string apiToken = System.Environment.GetEnvironmentVariable("KINTONE_APP_API_TOKEN");
             string appId = System.Environment.GetEnvironmentVariable("KINTONE_APP_APPID");
 
-            var request = makeHeader(subdomain, apiToken, "records", "app="+appId);
+            var request = makeHeader(subdomain, apiToken, "records", "app=" + appId);
             string responseStr = getResponse(request);
             System.Diagnostics.Debug.WriteLine(responseStr);
+
+            // JSONをCSVに変換
+            if (string.IsNullOrEmpty(responseStr)) return;
+
+            var jsonContent = (JObject)JsonConvert.DeserializeObject(responseStr);
+            var data = (JArray)jsonContent.GetValue("records");
+            foreach (var item in data)
+            {
+                var list = new List<string>();
+                var itemProperties = item.Children<JProperty>();
+                foreach (var prop in itemProperties)
+                {
+                    var myElement = prop.First;
+                    var myElementName = prop.Name;
+                    var myElementType = myElement.Value<JValue>("type").Value.ToString();
+                    try
+                    {
+                        switch (myElementType)
+                        {
+                            case "CREATOR":
+                            case "MODIFIER":
+                            case "FILE":
+                            case "SUBTABLE":
+                            case "CHECK_BOX":
+                            case "MULTI_SELECT":
+                            case "DROP_DOWN":
+                                break;
+                            default:
+                                var myElementValue = myElement.Value<JValue>("value");
+                                if (myElementValue != null && myElementValue.Value != null)
+                                {
+                                    list.Add(myElementValue.Value.ToString());
+                                }
+                                else
+                                {
+                                    list.Add("");
+                                }
+                                break;
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(myElementType);
+                    }
+                }
+                System.Diagnostics.Debug.WriteLine(string.Join(",", list));
+            }
+
         }
 
         private static HttpWebRequest makeHeader(string subdomain, string apiToken, string command, string query)
